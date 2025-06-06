@@ -5,10 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	//"io/ioutil"
 )
 
-// defining strct to represent a single to-do list
+// defining struct to represent a single to-do list
 type TodoItem struct {
 	ID          int    `json:"id"`          //unique ID
 	Description string `json:"description"` //task description
