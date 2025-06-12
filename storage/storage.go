@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	model "practice/assignments/model"
 )
@@ -19,6 +20,15 @@ func LoadTodos() []model.TodoItem {
 }
 
 func SaveTodos(todos []model.TodoItem) {
-	data, _ := json.MarshalIndent(todos, "", "  ")
-	_ = os.WriteFile(fileName, data, 0644)
+	data, err := json.MarshalIndent(todos, "", "  ")
+	if err != nil {
+		slog.Error("Failed to marshal todos", "error", err)
+		return
+	}
+	err = os.WriteFile(fileName, data, 0644)
+	if err != nil {
+		slog.Error("Failed to write file", "error", err)
+		return
+	}
+	slog.Info("Todos saved", "count", len(todos))
 }

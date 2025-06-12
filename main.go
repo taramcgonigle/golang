@@ -1,10 +1,27 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"log/slog"
+	"os"
+	"os/signal"
 	"practice/assignments/logic"
+	"practice/assignments/trace"
+	"syscall"
 )
+
+var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+func waitForInterrupt(ctx context.Context) {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+
+	// Wait for a signal to be received
+	sig := <-sigs
+	slog.Info("Shutdown signal received", "signal", sig, "traceID", trace.GetTraceID(ctx))
+}
 
 func main() {
 	add := flag.String("add", "", "Add a new todo item")
@@ -14,6 +31,10 @@ func main() {
 	list := flag.Bool("list", false, "List all items")
 	status := flag.String("status", "", "New status for the item (not started, started, completed)")
 	flag.Parse()
+
+	ctx := trace.NewContextWithTrace(context.Background())
+	traceID := trace.GetTraceID(ctx)
+	slog.Info("App starting", "traceID", traceID)
 
 	todos := logic.LoadTodos()
 
@@ -67,6 +88,6 @@ func main() {
 			}
 		}
 	}
-
 	logic.SaveTodos(todos)
+	waitForInterrupt(ctx)
 }
