@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Add To-Do</title>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			max-width: 600px;
+			margin: auto;
+			padding: 20px;
+		}
+		label {
+			display: inline-block;
+			width: 100px;
+			margin-bottom: 10px;
+		}
+		input, select {
+			width: 200px;
+			padding: 5px;
+			margin-bottom: 10px;
+		}
+		button {
+			margin-top: 10px;
+		}
+	</style>
+</head>
+<body>
+	<h1>Add To-Do</h1>
+
+	<form action="/create" method="POST">
+		<div>
+			<label>Description:</label>
+			<input name="description" required>
+		</div>
+		<div>
+			<label>Status:</label>
+			<select name="status">
+				<option value="not started">not started</option>
+				<option value="started">started</option>
+				<option value="completed">completed</option>
+			</select>
+		</div>
+		<div>
+			<button type="submit">Add</button>
+		</div>
+	</form>
+
+	<p><a href="/">← Back to list</a></p>
+</body>
+</html>

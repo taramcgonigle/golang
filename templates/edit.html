@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Edit To-Do</title>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			max-width: 600px;
+			margin: auto;
+			padding: 20px;
+		}
+		label {
+			display: inline-block;
+			width: 100px;
+			margin-bottom: 10px;
+		}
+		input, select {
+			width: 200px;
+			padding: 5px;
+			margin-bottom: 10px;
+		}
+		button {
+			margin-right: 10px;
+		}
+		.actions {
+			margin-top: 20px;
+		}
+	</style>
+</head>
+<body>
+	<h1>Edit To-Do</h1>
+
+	<form method="POST" action="/update">
+		<input type="hidden" name="id" value="{{.ID}}">
+		<div>
+			<label>Description:</label>
+			<input name="description" value="{{.Description}}">
+		</div>
+		<div>
+			<label>Status:</label>
+			<select name="status">
+				<option value="not started" {{if eq .Status "not started"}}selected{{end}}>not started</option>
+				<option value="started" {{if eq .Status "started"}}selected{{end}}>started</option>
+				<option value="completed" {{if eq .Status "completed"}}selected{{end}}>completed</option>
+			</select>
+		</div>
+		<div class="actions">
+			<button type="submit">Update</button>
+		</div>
+	</form>
+
+	<form method="POST" action="/delete" style="margin-top: 10px;">
+		<input type="hidden" name="id" value="{{.ID}}">
+		<button type="submit">Delete</button>
+	</form>
+
+	<p><a href="/">← Back to list</a></p>
+</body>
+</html>

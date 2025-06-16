@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>To-Do App</title>
+	<style>
+		body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; }
+		.todo-item { margin: 10px 0; }
+	</style>
+	<script>
+		function handleSelection(id) {
+			document.getElementById("selected-id").value = id;
+			document.getElementById("edit-button").style.display = "inline-block";
+		}
+	</script>
+</head>
+<body>
+	<h1>To-Do List</h1>
+	<a href="/create-form"><button type="button">➕ Add To-Do</button></a>
+
+	<form method="POST" action="/edit-form">
+		<ul>
+            {{range .}}
+                <li class="todo-item">
+                    <strong>{{.Description}}</strong> - {{.Status}}
+                    <input type="radio" name="select" onclick="handleSelection('{{.ID}}')">
+                </li>
+            {{end}}
+        </ul>
+
+		<input type="hidden" name="id" id="selected-id">
+		<div style="margin-top: 10px;">
+			<input type="hidden" name="id" id="selected-id">
+	        <button id="edit-button" type="submit" style="display: none;">✏️ Edit Selected To-Do</button>
+		</div>
+	</form>
+</body>
+</html>

@@ -4,10 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
-	"practice/assignments/logic"
+	"practice/assignments/api"
+	logic "practice/assignments/todo_service"
 	"practice/assignments/trace"
 	"syscall"
 )
@@ -24,6 +27,14 @@ func waitForInterrupt(ctx context.Context) {
 }
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	slog.Info("Starting API server on :8080")
+	if err := http.ListenAndServe(":8080", api.RegisterRoutes()); err != nil {
+		log.Fatal(err)
+	}
+
 	add := flag.String("add", "", "Add a new todo item")
 	deleteID := flag.Int("delete", -1, "Delete a todo item by ID")
 	update := flag.Int("update", -1, "Update the description or status of a todo item by ID")
