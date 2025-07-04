@@ -20,31 +20,35 @@
 			margin-bottom: 10px;
 		}
 		button {
-			margin-top: 10px;
+			margin-right: 10px;
+		}
+		.actions {
+			margin-top: 20px;
 		}
 	</style>
+    <meta charset="UTF-8">
+    <title>Create Todo</title>
 </head>
 <body>
-	<h1>Add To-Do</h1>
-
-	<form action="/create" method="POST">
-		<div>
-			<label>Description:</label>
-			<input name="description" required>
-		</div>
-		<div>
-			<label>Status:</label>
-			<select name="status">
-				<option value="not started">not started</option>
-				<option value="started">started</option>
-				<option value="completed">completed</option>
-			</select>
-		</div>
-		<div>
+    <h2>Add New Todo</h2>
+		<form action="/create" method="post">
+			<p>
+				<label for="description">Description:</label>
+				<input type="text" id="description" name="description" required>
+			</p>
+			<p>
+				<label for="status">Status:</label>
+				<select id="status" name="status" required>
+					<option value="">-- Select --</option>
+					<option value="not started">not started</option>
+					<option value="started">started</option>
+					<option value="completed">completed</option>
+				</select>
+			</p>
 			<button type="submit">Add</button>
-		</div>
-	</form>
+		</form>
 
-	<p><a href="/">← Back to list</a></p>
+		<p><a href="/">← Back to list</a></p>
+
 </body>
 </html>

@@ -1,42 +1,67 @@
 package api
 
+// defines the API handlers for the todo application, and interacts with the concurrency todomanager
+
 import (
 	"encoding/json"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
+	"practice/assignments/logic"
 	"practice/assignments/model"
-	"practice/assignments/storage"
 	"practice/assignments/trace"
 	"strconv"
 )
+
+// global instance for all handlers to access todo list via concurrency
+var manager *logic.TodoManager
+
+func init() { //initialize the todo manager at package load time
+	manager = logic.NewTodoManager()
+}
+
+// Place getTemplatePath here
+func getTemplatePath(name string) string {
+	// Try local templates/ first
+	path := filepath.Join("templates", name)
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	// Try parent directory (for tests run from api/)
+	path = filepath.Join("..", "templates", name)
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	// Fallback: original
+	return filepath.Join("templates", name)
+}
 
 // get handler serves the homepage which displays the list of todos
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
 	traceID := trace.GetTraceID(r.Context()) //log the request trace ID
 	slog.Info("Serving homepage", "traceID", traceID)
 
-	todos := storage.LoadTodos() //load all current todos from json file
+	//todos := storage.LoadTodos() //load all current todos from json file
 
-	//redner the homepage template + passing the todos
-	tmpl := template.Must(template.ParseFiles("templates/home.html"))
+	todos := manager.GetAll() //use actor managed state
+
+	//render the homepage template + passing the todos
+	tmpl := template.Must(template.ParseFiles(getTemplatePath("home.html")))
 	err := tmpl.Execute(w, todos)
 	if err != nil {
 		http.Error(w, "Error rendering template", http.StatusInternalServerError)
 	}
 }
 
-// get /create-form
+// CreateFormHandler renders the form used to create a new todo item
 func CreateFormHandler(w http.ResponseWriter, r *http.Request) {
-	// Render the create page template
-	tmpl := template.Must(template.ParseFiles("templates/create.html"))
-	err := tmpl.Execute(w, nil)
-	if err != nil {
-		http.Error(w, "Error rendering form", http.StatusInternalServerError)
-	}
+	tmpl := template.Must(template.ParseFiles(getTemplatePath("create.html")))
+	tmpl.Execute(w, nil)
 }
 
-// post /create
+// CreateHandler handles POST /create. It parses form data, validates inputs, creates a new todo item, and redirects to the home page.
 func CreateHandler(w http.ResponseWriter, r *http.Request) {
 	traceID := trace.GetTraceID(r.Context())
 
@@ -45,98 +70,113 @@ func CreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//parse the form input from the create page
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
 		return
 	}
 
-	todos := storage.LoadTodos() //Load current list of todos
+	desc := r.FormValue("description")
+	status := r.FormValue("status")
 
-	//generate a new ID based on last item's ID
+	if desc == "" || status == "" { // make sure both fields are provided
+		http.Error(w, "Missing description or status", http.StatusBadRequest)
+		return
+	}
+
+	// Get current todos to calculate next ID
+	todos := manager.GetAll()
 	newID := 0
 	if len(todos) > 0 {
 		newID = todos[len(todos)-1].ID + 1
 	}
 
-	//build a new TodoItem from form values
+	// Construct and add the new item
 	todo := model.TodoItem{
 		ID:          newID,
-		Description: r.FormValue("description"),
-		Status:      r.FormValue("status"),
+		Description: desc,
+		Status:      status,
 	}
 
-	//Add to list and save to file
-	todos = append(todos, todo)
-	err := storage.SaveTodos(todos)
-	if err != nil {
-		http.Error(w, "Failed to save todo", http.StatusInternalServerError)
-		return
-	}
+	// Send to actor
+	manager.Add(todo)
 
 	slog.Info("Todo created", "traceID", traceID, "ID", todo.ID, "description", todo.Description)
 
-	http.Redirect(w, r, "/", http.StatusSeeOther) //go back to homepage
+	// Redirect back to home after successful creation
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// Get
+// Handles /get and returns the list of todo items as a JSON response
 func GetHandler(w http.ResponseWriter, r *http.Request) {
-	traceID := trace.GetTraceID(r.Context())
+	traceID := trace.GetTraceID(r.Context()) //gets trace ID for logging
 	slog.Info("Returning JSON todo list", "traceID", traceID)
 
-	todos := storage.LoadTodos()
-	w.Header().Set("Content-Type", "application/json")
+	//todos := storage.LoadTodos()
+
+	// Use the concurrency-safe manager to get the current todo list
+	todos := manager.GetAll()
+
+	w.Header().Set("Content-Type", "application/json") //return the todos as json
 	json.NewEncoder(w).Encode(todos)
 }
 
-// get or post /edit-form
+// Renders the edit form pre-filled with data for a specific todo item, identified by ID.
 func EditFormHandler(w http.ResponseWriter, r *http.Request) {
-	var idStr string
+	traceID := trace.GetTraceID(r.Context())
+	slog.Info("Edit form request", "traceID", traceID)
 
-	// Handle both GET and POST submissions of selected ID
-	if r.Method == http.MethodPost {
-		idStr = r.FormValue("id")
-	} else {
-		idStr = r.URL.Query().Get("id")
+	idStr := r.FormValue("id") // works for both GET and POST
+	if idStr == "" {
+		http.Error(w, "Missing ID", http.StatusBadRequest)
+		return
 	}
 
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		http.Error(w, "Invalid ID format", http.StatusBadRequest)
 		return
 	}
 
-	todos := storage.LoadTodos()
+	todos := manager.GetAll()
 
-	// Find the selected todo item
-	var selected model.TodoItem
+	// Search for the todo with the given ID
+	var todo model.TodoItem
+	found := false
 	for _, t := range todos {
 		if t.ID == id {
-			selected = t
+			todo = t
+			found = true
 			break
 		}
 	}
 
-	// Render the edit page with the selected item
+	if !found {
+		http.Error(w, "To-do item not found", http.StatusNotFound)
+		return
+	}
+
+	// Render the form with the existing item preloaded
 	tmpl := template.Must(template.ParseFiles("templates/edit.html"))
-	err = tmpl.Execute(w, selected)
-	if err != nil {
+	if err := tmpl.Execute(w, todo); err != nil {
 		http.Error(w, "Error rendering edit page", http.StatusInternalServerError)
 	}
 }
 
-// post /update
+// handles POST /update to modify an existing todo item.
 func UpdateHandler(w http.ResponseWriter, r *http.Request) {
+	// Only allow POST requests
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
 		return
 	}
 
+	// Parse form data
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
 		return
 	}
 
+	// Extract values from the form
 	idStr := r.FormValue("id")
 	desc := r.FormValue("description")
 	status := r.FormValue("status")
@@ -144,50 +184,34 @@ func UpdateHandler(w http.ResponseWriter, r *http.Request) {
 	traceID := trace.GetTraceID(r.Context())
 	slog.Info("Update requested", "traceID", traceID, "id", idStr, "description", desc, "status", status)
 
+	// Convert ID from string to int
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		http.Error(w, "Invalid ID", http.StatusBadRequest)
 		return
 	}
 
-	todos := storage.LoadTodos()
-	updated := false
-
-	// Replace the matching item in the list
-	for i, t := range todos {
-		if t.ID == id {
-			todos[i].Description = desc
-			todos[i].Status = status
-			updated = true
-			break
-		}
+	// Build the updated TodoItem to submit to the manager
+	todo := model.TodoItem{
+		ID:          id,
+		Description: desc,
+		Status:      status,
 	}
 
-	if !updated {
-		http.Error(w, "Item not found", http.StatusNotFound)
-		return
-	}
+	// Use the manager to update the item (concurrency-safe)
+	manager.Update(todo)
 
-	if err := storage.SaveTodos(todos); err != nil {
-		http.Error(w, "Failed to save", http.StatusInternalServerError)
-		return
-	}
+	slog.Info("Todo updated via manager", "traceID", traceID, "id", id)
 
-	slog.Info("Todo updated", "traceID", traceID, "id", id)
-
+	// Redirect back to homepage
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// post /delete
+// handles GET /delete?id=ID to remove a todo item. Reads ID from query parameters.
 func DeleteHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
-		return
-	}
-
 	traceID := trace.GetTraceID(r.Context())
-	idStr := r.FormValue("id") // from form body (not URL query)
 
+	idStr := r.URL.Query().Get("id")
 	if idStr == "" {
 		http.Error(w, "Missing 'id' parameter", http.StatusBadRequest)
 		return
@@ -195,29 +219,12 @@ func DeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		http.Error(w, "Invalid ID format", http.StatusBadRequest)
 		return
 	}
 
-	todos := storage.LoadTodos()
-	index := -1
-	for i := range todos {
-		if todos[i].ID == id {
-			index = i
-			break
-		}
-	}
+	manager.Delete(id)
 
-	if index == -1 {
-		http.Error(w, "Item not found", http.StatusNotFound)
-		return
-	}
-
-	// Remove the item from the slice
-	todos = append(todos[:index], todos[index+1:]...)
-	_ = storage.SaveTodos(todos)
-
-	slog.Info("Todo deleted", "traceID", traceID, "id", id)
-
+	slog.Info("Deleted todo", "traceID", traceID, "id", id)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

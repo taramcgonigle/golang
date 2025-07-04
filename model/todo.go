@@ -1,5 +1,6 @@
 package model
 
+//defines the data model for the todo application
 type TodoItem struct {
 	ID          int
 	Description string
